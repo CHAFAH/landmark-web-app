@@ -78,15 +78,93 @@ sudo systemctl status jenkins
 
 Go to **Manage Jenkins → Plugins → Available plugins**, search and install each one:
 
+### Core
+
 | Plugin | Why |
 |--------|-----|
 | **Git** | Clone the GitHub repo |
-| **NodeJS** | Run `npm` commands |
-| **Docker Pipeline** | Build and push Docker images |
-| **Credentials Binding** | Inject DockerHub credentials securely |
-| **Pipeline** | Run declarative pipelines (Jenkinsfile) |
+| **GitHub Integration** | Webhook triggers and GitHub status updates |
+| **NodeJS** | Run `npm` commands in pipelines |
+| **Docker Pipeline** | `docker.build()` and `docker.push()` in pipelines |
+| **Docker Commons** | Shared Docker tooling used by Docker Pipeline |
+| **Credentials Binding** | Inject secrets (DockerHub, GitHub) as env variables |
+| **Pipeline** | Declarative pipeline support (Jenkinsfile) |
+| **Pipeline: Stage View** | Visual stage-by-stage progress on the job page |
 
-After installing → **Restart Jenkins** when prompted.
+### Visibility & Monitoring
+
+| Plugin | Why |
+|--------|-----|
+| **Blue Ocean** | Modern pipeline UI with visual stage graph and logs per step |
+| **Build Timestamp** | Adds `BUILD_TIMESTAMP` variable — use it in image tags |
+| **Timestamper** | Prints timestamps next to every log line in Console Output |
+| **Console Column** | Shows a direct Console Output link on the jobs dashboard |
+| **Build Monitor View** | Big-screen dashboard showing live build status for all jobs |
+| **Dashboard View** | Customisable dashboard with build stats and job summaries |
+
+### Notifications
+
+| Plugin | Why |
+|--------|-----|
+| **Slack Notification** | Send build success/failure messages to a Slack channel |
+| **Email Extension** | Send detailed HTML build reports by email |
+| **Mailer** | Basic email notifications on build failure or recovery |
+
+### Utilities
+
+| Plugin | Why |
+|--------|-----|
+| **Workspace Cleanup** | `cleanWs()` — deletes workspace after each build |
+| **AnsiColor** | Renders ANSI colour codes in Console Output (coloured logs) |
+| **Rebuild** | Adds a **Rebuild** button to re-run a build with the same parameters |
+| **Job DSL** | Define and create jobs as code using a Groovy DSL |
+| **Parameterized Trigger** | Trigger downstream jobs and pass parameters between them |
+
+After installing all plugins → click **Restart Jenkins** when prompted.
+
+### Enable Timestamper globally
+
+After installing the Timestamper plugin:
+
+1. Go to **Manage Jenkins → System**
+2. Scroll to **Timestamper**
+3. Set System clock timezone to your timezone
+4. Click **Save**
+
+To enable it on a specific job, in the **Build Environment** tab check **Add timestamps to the Console Output**.
+
+To enable it in a Jenkinsfile:
+```groovy
+options {
+    timestamps()
+    ansiColor('xterm')
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+}
+```
+
+### Enable Blue Ocean
+
+After installing Blue Ocean, access it at:
+```
+http://<jenkins-ip>:8080/blue
+```
+It shows each stage as a visual node, with logs scoped per step — much easier to read than the classic UI.
+
+### Enable Build Timestamp
+
+After installing the Build Timestamp plugin:
+
+1. Go to **Manage Jenkins → System**
+2. Scroll to **Build Timestamp**
+3. Set the pattern, e.g. `yyyyMMdd-HHmmss`
+4. Click **Save**
+
+Now use `${BUILD_TIMESTAMP}` in your pipeline instead of generating a timestamp manually:
+```groovy
+environment {
+    IMAGE_TAG = "build-${BUILD_NUMBER}-${BUILD_TIMESTAMP}"
+}
+```
 
 ---
 
