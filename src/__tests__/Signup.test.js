@@ -94,4 +94,21 @@ describe('Signup Page', () => {
     fireEvent.change(select, { target: { value: 'AI & Machine Learning' } });
     expect(select).toHaveValue('AI & Machine Learning');
   });
+
+  test('email input has type email', () => {
+    render(<Signup />);
+    expect(screen.getByPlaceholderText('Email')).toHaveAttribute('type', 'email');
+  });
+
+  test('shows generic error when no response data', async () => {
+    mock.onPost('/api/signup').reply(500);
+    render(<Signup />);
+    fireEvent.change(screen.getByPlaceholderText('Full Name'), { target: { value: 'John' } });
+    fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'john@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('Phone'), { target: { value: '123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Register' }));
+    await waitFor(() => {
+      expect(screen.getByText('Registration failed')).toBeInTheDocument();
+    });
+  });
 });

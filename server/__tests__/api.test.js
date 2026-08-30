@@ -121,4 +121,15 @@ describe('GET /api/students', () => {
     expect(res.body[0].name).toBe('Second');
     expect(res.body[1].name).toBe('First');
   });
+
+  test('each student has required fields', async () => {
+    await Student.create({ name: 'Test', email: 'test@test.com', phone: '999', course: 'DevOps Engineering' });
+    const res = await request(app).get('/api/students');
+    const student = res.body[0];
+    expect(student).toHaveProperty('name');
+    expect(student).toHaveProperty('email');
+    expect(student).toHaveProperty('phone');
+    expect(student).toHaveProperty('course');
+    expect(student).toHaveProperty('createdAt');
+  });
 });

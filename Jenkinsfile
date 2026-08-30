@@ -1,17 +1,23 @@
 pipeline {
     agent any
+
     tools {
         nodejs 'NodeJS-18'
     }
+
     environment {
         DOCKER_REPO = 'chafah/landmark-web-app'
-        AWS_REGION = 'us-east-1'
-        EKS_CLUSTER = 'landmark-eks'
+        IMAGE_TAG   = "build-${BUILD_NUMBER}"
     }
+
     stages {
+
         stage('Checkout') {
-            steps { checkout scm }
+            steps {
+                checkout scm
+            }
         }
+
         stage('Install & Test') {
             steps {
                 sh 'npm ci'
@@ -19,94 +25,48 @@ pipeline {
                 sh 'cd server && npm ci && npm test'
             }
         }
-        stage('Build Frontend') {
-            steps { sh 'npm run build' }
-        }
-        stage('Generate Image Tag') {
+
+        stage('Build Docker Image') {
             steps {
-                script {
-                    def branch = (env.BRANCH_NAME ?: env.GIT_BRANCH?.replaceAll('origin/', '') ?: 'main').replaceAll('/', '-')
-                    def timestamp = new Date().format('yyyyMMdd-HHmmss')
-                    env.IMAGE_TAG = "${branch}-${timestamp}"
-                    echo "Image Tag: ${env.IMAGE_TAG}"
-                }
+                sh 'docker build -t ${DOCKER_REPO}:${IMAGE_TAG} .'
             }
         }
-        stage('Docker Build & Push') {
-            when {
-                anyOf {
-                    branch 'develop'
-                    branch pattern: 'release*', comparator: 'GLOB'
-                    branch 'main'
-                    branch pattern: 'hotfix*', comparator: 'GLOB'
-                    // Allow regular pipeline jobs (BRANCH_NAME is null)
-                    expression { return env.BRANCH_NAME == null }
-                }
-            }
+
+        stage('Run Container') {
             steps {
-                script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-creds') {
-                        def app = docker.build("${DOCKER_REPO}:${IMAGE_TAG}")
-                        app.push()
-                    }
-                }
+                sh 'docker run -d --name landmark-test -p 5000:5000 ${DOCKER_REPO}:${IMAGE_TAG}'
+                sh 'sleep 5'
+                sh 'curl -f http://localhost:5000/api/students || exit 1'
+                sh 'docker stop landmark-test && docker rm landmark-test'
             }
         }
-        stage('Deploy to Dev') {
-            when { branch 'develop' }
+
+        stage('Push to DockerHub') {
             steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
-                    sh """
-                        aws eks update-kubeconfig --name ${EKS_CLUSTER} --region ${AWS_REGION}
-                        sed -i 's/name: landmark/name: develop/g' k8s/namespace.yml
-                        sed -i 's/namespace: landmark/namespace: develop/g' k8s/*.yml
-                        sed -i "s|image: landmark-technologies:latest|image: ${DOCKER_REPO}:${IMAGE_TAG}|g" k8s/app-deployment.yml
-                        kubectl apply -f k8s/namespace.yml
-                        kubectl apply -f k8s/
-                    """
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_PASS'
+                )]) {
+                    sh 'echo $DH_PASS | docker login -u $DH_USER --password-stdin'
+                    sh 'docker push ${DOCKER_REPO}:${IMAGE_TAG}'
+                    sh 'docker logout'
                 }
             }
         }
-        stage('Deploy to Staging') {
-            when { branch pattern: 'release*', comparator: 'GLOB' }
-            steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
-                    sh """
-                        aws eks update-kubeconfig --name ${EKS_CLUSTER} --region ${AWS_REGION}
-                        sed -i 's/name: landmark/name: staging/g' k8s/namespace.yml
-                        sed -i 's/namespace: landmark/namespace: staging/g' k8s/*.yml
-                        sed -i "s|image: landmark-technologies:latest|image: ${DOCKER_REPO}:${IMAGE_TAG}|g" k8s/app-deployment.yml
-                        kubectl apply -f k8s/namespace.yml
-                        kubectl apply -f k8s/
-                    """
-                }
-            }
-        }
-        stage('Deploy to Production') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch pattern: 'hotfix*', comparator: 'GLOB'
-                    expression { return env.BRANCH_NAME == null }
-                }
-            }
-            steps {
-                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
-                    sh """
-                        aws eks update-kubeconfig --name ${EKS_CLUSTER} --region ${AWS_REGION}
-                        sed -i 's/name: landmark/name: production/g' k8s/namespace.yml
-                        sed -i 's/namespace: landmark/namespace: production/g' k8s/*.yml
-                        sed -i "s|image: landmark-technologies:latest|image: ${DOCKER_REPO}:${IMAGE_TAG}|g" k8s/app-deployment.yml
-                        kubectl apply -f k8s/namespace.yml
-                        kubectl apply -f k8s/
-                    """
-                }
-            }
-        }
+
     }
+
     post {
-        success { echo 'Pipeline succeeded!' }
-        failure { echo 'Pipeline failed!' }
-        always  { cleanWs() }
+        success {
+            echo "Pipeline succeeded! Image pushed: ${DOCKER_REPO}:${IMAGE_TAG}"
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+        always {
+            sh 'docker rmi ${DOCKER_REPO}:${IMAGE_TAG} || true'
+            cleanWs()
+        }
     }
 }

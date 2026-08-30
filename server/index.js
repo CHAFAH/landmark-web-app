@@ -7,10 +7,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongo:27017/landmark';
-
 const connectDB = async () => {
-  await mongoose.connect(MONGO_URI);
+  let uri = process.env.MONGO_URI;
+  if (!uri) {
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    const mongod = await MongoMemoryServer.create();
+    uri = mongod.getUri();
+    console.log('Using in-memory MongoDB');
+  }
+  await mongoose.connect(uri);
   console.log('MongoDB connected');
 };
 
@@ -50,8 +55,9 @@ app.get('*', (req, res) => {
 
 // Only start server if not in test mode
 if (process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 5000;
   connectDB().then(() => {
-    app.listen(5000, () => console.log('Server running on port 5000'));
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   });
 }
 

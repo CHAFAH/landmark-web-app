@@ -26,4 +26,17 @@ describe('Home Page', () => {
     renderHome();
     expect(screen.getByText('Ready to transform your career?')).toBeInTheDocument();
   });
+
+  test('renders all three feature cards', () => {
+    renderHome();
+    expect(screen.getByText('Hands-On Labs')).toBeInTheDocument();
+    expect(screen.getByText('AI & ML Training')).toBeInTheDocument();
+    expect(screen.getByText('Career Support')).toBeInTheDocument();
+  });
+
+  test('feature cards have descriptions', () => {
+    renderHome();
+    expect(screen.getByText(/Real-world projects with industry tools/)).toBeInTheDocument();
+    expect(screen.getByText(/Resume reviews, mock interviews/)).toBeInTheDocument();
+  });
 });
