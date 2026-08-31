@@ -34,6 +34,7 @@ pipeline {
 
         stage('Run Container') {
             steps {
+                sh 'docker rm -f landmark-test || true'
                 sh 'docker run -d --name landmark-test -p 5000:5000 -e MONGO_URI=mongodb://host.docker.internal:27017/landmark ${DOCKER_REPO}:${IMAGE_TAG}'
                 sh 'sleep 5'
                 sh 'curl -f http://localhost:5000/api/students || exit 1'
