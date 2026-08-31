@@ -19,7 +19,7 @@ const connectDB = async () => {
     console.log('Using in-memory MongoDB');
   }
   await mongoose.connect(uri);
-  console.log('MongoDB connected');
+  console.log('MongoDB connected to:', uri.replace(/://.*@/, '://***@'));
 };
 
 const StudentSchema = new mongoose.Schema({
