@@ -1,4 +1,4 @@
-# Frontend
+# Frontend build
 FROM node:18-slim AS frontend
 WORKDIR /app
 COPY package.json .
@@ -14,6 +14,5 @@ COPY server/package.json .
 RUN npm install
 COPY server/index.js .
 COPY --from=frontend /app/build ./public
-ENV NODE_ENV=production
 EXPOSE 5000
 CMD ["node", "index.js"]

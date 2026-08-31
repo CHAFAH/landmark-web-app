@@ -274,17 +274,14 @@ docker build -t chafah/landmark-web-app:build-${BUILD_NUMBER} .
 
 **Step 3 — Run and verify container:**
 ```bash
-HOST_IP=$(ip route | awk 'NR==1 {print $3}')
 docker rm -f landmark-webapp || true
-docker run -d --name landmark-webapp -p 5000:5000 \
-  -e MONGO_URI=mongodb://${HOST_IP}:27017/landmark \
-  chafah/landmark-web-app:build-${BUILD_NUMBER}
-sleep 10
-curl -f http://localhost:5000/api/students || exit 1
+docker run -d --name landmark-webapp -p 5000:5000 chafah/landmark-web-app:build-${BUILD_NUMBER}
+sleep 5
+curl -f http://localhost:5000 || exit 1
 docker stop landmark-webapp && docker rm landmark-webapp
 ```
 
-> `HOST_IP=$(ip route | awk 'NR==1 {print $3}')` gets the EC2 host IP automatically so the container can reach MongoDB running on the host. This is more reliable than `host.docker.internal` on Linux.
+> `docker rm -f landmark-webapp || true` removes any leftover container from a previous build so the job can run multiple times without a name conflict.
 
 **Step 4 — Push to DockerHub:**
 ```bash
@@ -377,15 +374,10 @@ node {
     }
 
     stage('Run Container') {
-        sh "docker rm -f landmark-test || true"
-        sh '''
-            HOST_IP=$(ip route | awk 'NR==1 {print $3}')
-            docker run -d --name landmark-test -p 5000:5000 \
-              -e MONGO_URI=mongodb://${HOST_IP}:27017/landmark \
-              ''' + "${dockerRepo}:${imageTag}" + '''
-        '''
-        sh 'sleep 10'
-        sh 'curl -f http://localhost:5000/api/students || exit 1'
+        sh 'docker rm -f landmark-test || true'
+        sh "docker run -d --name landmark-test -p 5000:5000 ${dockerRepo}:${imageTag}"
+        sh 'sleep 5'
+        sh 'curl -f http://localhost:5000 || exit 1'
         sh 'docker stop landmark-test && docker rm landmark-test'
     }
 
@@ -433,36 +425,6 @@ Now every `git push` automatically triggers the Jenkins job.
 
 ---
 
-## 9. Start MongoDB on the Jenkins Server
-
-The container needs a MongoDB to connect to. Run this once on your EC2 instance:
-
-```bash
-docker run -d --name mongo -p 27017:27017 --restart unless-stopped mongo:7
-```
-
-Verify it's running:
-```bash
-docker ps | grep mongo
-```
-
-`host.docker.internal` in the `MONGO_URI` tells the app container to reach MongoDB on the EC2 host. On Linux, use the host gateway IP instead:
-
-```bash
-# Get the host IP
-ip route | awk 'NR==1 {print $3}'
-
-# Then run the container with that IP
-HOST_IP=$(ip route | awk 'NR==1 {print $3}')
-docker run -d --name landmark-webapp -p 5000:5000 \
-  -e MONGO_URI=mongodb://${HOST_IP}:27017/landmark \
-  chafah/landmark-web-app:build-${BUILD_NUMBER}
-```
-
----
-
-## 10. Verify the Result
-
 After a successful build, verify the image was pushed:
 
 ```bash
@@ -486,7 +448,5 @@ https://hub.docker.com/r/chafah/landmark-web-app/tags
 | `docker: permission denied` | Run `sudo usermod -aG docker jenkins` then restart Jenkins |
 | `dockerhub-creds not found` | Credential ID typo — must be exactly `dockerhub-creds` |
 | Container name already in use | `docker rm -f landmark-webapp` then build again |
-| `MONGO_URI required in production` | Missing `-e MONGO_URI` in the `docker run` command |
 | `curl: (7) Failed to connect` | App didn't start in time — increase `sleep 5` to `sleep 10` |
-| `host.docker.internal` not resolving | Use `HOST_IP=$(ip route \| awk 'NR==1 {print $3}')` and pass `-e MONGO_URI=mongodb://${HOST_IP}:27017/landmark` |
 | GitHub clone fails (private repo) | Add `github-creds` credential and select it in the job config |
