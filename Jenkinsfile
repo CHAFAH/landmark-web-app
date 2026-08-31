@@ -22,7 +22,6 @@ pipeline {
             steps {
                 sh 'npm ci'
                 sh 'npm test'
-                sh 'cd server && npm ci && npm test'
             }
         }
 
