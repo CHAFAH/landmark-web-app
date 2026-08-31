@@ -10,6 +10,9 @@ app.use(express.json());
 const connectDB = async () => {
   let uri = process.env.MONGO_URI;
   if (!uri) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('MONGO_URI environment variable is required in production');
+    }
     const { MongoMemoryServer } = require('mongodb-memory-server');
     const mongod = await MongoMemoryServer.create();
     uri = mongod.getUri();

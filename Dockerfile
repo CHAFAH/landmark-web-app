@@ -1,5 +1,5 @@
 # Frontend
-FROM node:18-alpine AS frontend
+FROM node:18-slim AS frontend
 WORKDIR /app
 COPY package.json .
 RUN npm install
@@ -8,7 +8,7 @@ COPY src ./src
 RUN npm run build
 
 # Server
-FROM node:18-alpine
+FROM node:18-slim
 WORKDIR /app
 COPY server/package.json .
 RUN npm install
