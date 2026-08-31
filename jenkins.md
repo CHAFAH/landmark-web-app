@@ -255,48 +255,40 @@ The simplest job type. No Jenkinsfile needed — you configure everything throug
 **Build Environment tab:**
 - Check **Provide Node & npm bin/folder to PATH**
 - NodeJS Installation: `NodeJS-18`
+- Check **Add timestamps to the Console Output**
+- Check **Use secret text(s) or file(s)** → Add **Username and password (separated)**:
+  - Username variable: `DH_USER`
+  - Password variable: `DH_PASS`
+  - Credentials: `dockerhub-creds`
 
-**Build Steps tab → Add build step → Execute shell:**
+**Build Steps tab → Add build step → Execute shell** (one single block):
 
-Paste this — one block at a time (add 4 separate shell steps):
-
-**Step 1 — Install and test:**
 ```bash
+# Install and test
 npm ci
 npm test
-cd server && npm ci && npm test
-```
 
-**Step 2 — Build Docker image:**
-```bash
+# Build Docker image
 docker build -t chafah/landmark-web-app:build-${BUILD_NUMBER} .
-```
 
-**Step 3 — Run and verify container:**
-```bash
+# Run and verify container
 docker rm -f landmark-webapp || true
 docker run -d --name landmark-webapp -p 5000:5000 chafah/landmark-web-app:build-${BUILD_NUMBER}
 sleep 5
 curl -f http://localhost:5000 || exit 1
 docker stop landmark-webapp && docker rm landmark-webapp
-```
 
-> `docker rm -f landmark-webapp || true` removes any leftover container from a previous build so the job can run multiple times without a name conflict.
-
-**Step 4 — Push to DockerHub:**
-```bash
+# Push to DockerHub
 echo $DH_PASS | docker login -u $DH_USER --password-stdin
 docker push chafah/landmark-web-app:build-${BUILD_NUMBER}
 docker logout
 docker rmi chafah/landmark-web-app:build-${BUILD_NUMBER} || true
 ```
 
-For Step 4 to work, inject the DockerHub credentials:
-- **Build Environment tab** → check **Use secret text(s) or file(s)**
-- Add **Username and password (separated)**:
-  - Username variable: `DH_USER`
-  - Password variable: `DH_PASS`
-  - Credentials: `dockerhub-creds`
+> Keep everything in one shell block so if any step fails, the rest won't run.
+
+**Build Triggers tab:**
+- Check **GitHub hook trigger for GITScm polling**
 
 Click **Save** → **Build Now**
 
@@ -314,6 +306,13 @@ This reads the `Jenkinsfile` directly from the repo. The pipeline is version-con
 2. Name it `landmark-pipeline`
 3. Select **Pipeline** → click **OK**
 
+**General tab:**
+- Check **GitHub project**
+- Project URL: `https://github.com/chafah/landmark-web-app`
+
+**Build Triggers tab:**
+- Check **GitHub hook trigger for GITScm polling**
+
 **Pipeline tab:**
 - Definition: **Pipeline script from SCM**
 - SCM: **Git**
@@ -324,23 +323,103 @@ This reads the `Jenkinsfile` directly from the repo. The pipeline is version-con
 
 Click **Save** → **Build Now**
 
-The `Jenkinsfile` in the repo root will run these stages:
+The `Jenkinsfile` at the project root defines these stages:
 
 | Stage | What happens |
 |-------|-------------|
-| Checkout | Clones the repo |
-| Install & Test | `npm ci`, `npm test` for frontend and server |
-| Build Docker Image | `docker build -t chafah/landmark-web-app:build-N .` |
-| Run Container | Starts the container, hits `/api/students`, stops it |
-| Push to DockerHub | Logs in and pushes the image |
+| Checkout | Clones the repo from GitHub |
+| Install & Test | Runs `npm ci` and `npm test` |
+| Build Docker Image | Builds `chafah/landmark-web-app:build-N` |
+| Run Container | Starts the container, hits `http://localhost:5000`, stops it |
+| Push to DockerHub | Logs in with `dockerhub-creds` and pushes the image |
 
-Watch progress under **Stage View** on the job page.
+After saving, view the pipeline progress under **Stage View** on the job page, or open **Blue Ocean** for a visual graph:
+```
+http://<jenkins-ip>:8080/blue/pipelines
+```
+
+The full `Jenkinsfile` used by this job:
+
+```groovy
+pipeline {
+    agent any
+
+    tools {
+        nodejs 'NodeJS-18'
+    }
+
+    environment {
+        DOCKER_REPO = 'chafah/landmark-web-app'
+        IMAGE_TAG   = "build-${BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install & Test') {
+            steps {
+                sh 'npm ci'
+                sh 'npm test'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t ${DOCKER_REPO}:${IMAGE_TAG} .'
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                sh 'docker rm -f landmark-test || true'
+                sh 'docker run -d --name landmark-test -p 5000:5000 ${DOCKER_REPO}:${IMAGE_TAG}'
+                sh 'sleep 5'
+                sh 'curl -f http://localhost:5000 || exit 1'
+                sh 'docker stop landmark-test && docker rm landmark-test'
+            }
+        }
+
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_PASS'
+                )]) {
+                    sh 'echo $DH_PASS | docker login -u $DH_USER --password-stdin'
+                    sh 'docker push ${DOCKER_REPO}:${IMAGE_TAG}'
+                    sh 'docker logout'
+                }
+            }
+        }
+
+    }
+
+    post {
+        success {
+            echo "Pipeline succeeded! Image pushed: ${DOCKER_REPO}:${IMAGE_TAG}"
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+        always {
+            sh 'docker rmi ${DOCKER_REPO}:${IMAGE_TAG} || true'
+            cleanWs()
+        }
+    }
+}
+```
 
 ---
 
 ### Job Type 3: Scripted Pipeline
 
-Scripted pipelines use `node {}` blocks and plain Groovy. More flexible than declarative but more verbose. Good to know for complex logic.
+Scripted pipelines use `node {}` blocks and plain Groovy. More flexible than declarative but more verbose.
 
 **Steps:**
 
@@ -348,9 +427,16 @@ Scripted pipelines use `node {}` blocks and plain Groovy. More flexible than dec
 2. Name it `landmark-scripted`
 3. Select **Pipeline** → click **OK**
 
+**General tab:**
+- Check **GitHub project**
+- Project URL: `https://github.com/chafah/landmark-web-app`
+
+**Build Triggers tab:**
+- Check **GitHub hook trigger for GITScm polling**
+
 **Pipeline tab:**
 - Definition: **Pipeline script**
-- Paste the script below directly into the text box
+- Paste the script below directly into the text box:
 
 ```groovy
 node {
@@ -365,7 +451,6 @@ node {
     stage('Install & Test') {
         nodejs('NodeJS-18') {
             sh 'npm ci && npm test'
-            sh 'cd server && npm ci && npm test'
         }
     }
 
@@ -400,35 +485,78 @@ node {
 }
 ```
 
+**Build Triggers tab:**
+- Check **GitHub hook trigger for GITScm polling**
+
 Click **Save** → **Build Now**
 
 ---
 
-## 8. Trigger Builds Automatically (Webhook)
+## 8. GitHub Webhook Setup
 
-Instead of clicking **Build Now** manually, configure GitHub to trigger Jenkins on every `git push`.
+A webhook tells GitHub to automatically notify Jenkins every time you push code, so you never have to click **Build Now** manually.
 
-**In Jenkins:**
-1. Open your job → **Configure**
-2. **Build Triggers** tab → check **GitHub hook trigger for GITScm polling**
-3. Click **Save**
+### Step 1 — Enable the trigger in Jenkins
 
-**In GitHub:**
-1. Go to your repo → **Settings → Webhooks → Add webhook**
-2. Fill in:
-   - Payload URL: `http://<jenkins-ip>:8080/github-webhook/`
-   - Content type: `application/json`
-   - Which events: **Just the push event**
-3. Click **Add webhook**
+Do this for each job you want auto-triggered:
 
-Now every `git push` automatically triggers the Jenkins job.
+1. Open the job → **Configure**
+2. Go to the **Build Triggers** tab
+3. Check **GitHub hook trigger for GITScm polling**
+4. Click **Save**
+
+### Step 2 — Add the webhook in GitHub
+
+1. Go to your GitHub repo: `https://github.com/chafah/landmark-web-app`
+2. Click **Settings** → **Webhooks** → **Add webhook**
+3. Fill in:
+
+| Field | Value |
+|-------|-------|
+| Payload URL | `http://<your-jenkins-ip>:8080/github-webhook/` |
+| Content type | `application/json` |
+| Which events | **Just the push event** |
+| Active | ✅ checked |
+
+4. Click **Add webhook**
+
+> The Jenkins IP must be publicly reachable from GitHub. If your Jenkins is behind a firewall or on a private network, GitHub cannot reach it. Use the EC2 public IP.
+
+### Step 3 — Verify the webhook works
+
+1. In GitHub → **Settings → Webhooks** → click your webhook
+2. Scroll to **Recent Deliveries**
+3. You should see a green tick ✅ with a `200` response
+4. If you see a red ✗, click it to see the error — most common cause is the Jenkins URL is wrong or port 8080 is blocked in the Security Group
+
+### Step 4 — Test it end to end
+
+```bash
+# Make a small change and push
+echo "# test" >> README.md
+git add README.md
+git commit -m "test webhook trigger"
+git push origin main
+```
+
+Go to Jenkins — the job should start automatically within a few seconds.
+
+### Webhook Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| GitHub shows red ✗ on delivery | Check Jenkins URL is correct and port 8080 is open in EC2 Security Group |
+| Jenkins job doesn't trigger | Make sure **GitHub hook trigger for GITScm polling** is checked in the job |
+| `302` response from Jenkins | Jenkins is redirecting — make sure the URL ends with `/github-webhook/` (trailing slash required) |
+| Webhook delivers but job doesn't run | The branch in the webhook push doesn't match the branch configured in the job |
 
 ---
+
+## 9. Verify the Result
 
 After a successful build, verify the image was pushed:
 
 ```bash
-# On the Jenkins server or your local machine
 docker pull chafah/landmark-web-app:build-<BUILD_NUMBER>
 docker run -p 5000:5000 chafah/landmark-web-app:build-<BUILD_NUMBER>
 ```
@@ -440,11 +568,12 @@ https://hub.docker.com/r/chafah/landmark-web-app/tags
 
 ---
 
-## 11. Troubleshooting
+## 10. Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | `npm: command not found` | NodeJS tool not configured — check **Manage Jenkins → Tools → NodeJS** |
+| `Missing script: test` | Remove `cd server && npm test` — server has no tests anymore |
 | `docker: permission denied` | Run `sudo usermod -aG docker jenkins` then restart Jenkins |
 | `dockerhub-creds not found` | Credential ID typo — must be exactly `dockerhub-creds` |
 | Container name already in use | `docker rm -f landmark-webapp` then build again |
