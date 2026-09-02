@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        DOCKER_REPO = 'chafah/landmark-web-app'
+        DOCKER_REPO = 'ddankwah/landmark-web-app'
         IMAGE_TAG   = "build-${BUILD_NUMBER}"
     }
 
@@ -45,10 +45,10 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DH_USER',
-                    passwordVariable: 'DH_PASS'
+                    usernameVariable: 'DOCKERHUB_USER',
+                    passwordVariable: 'DOCKERHUB_PASS'
                 )]) {
-                    sh 'echo $DH_PASS | docker login -u $DH_USER --password-stdin'
+                    sh 'echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin'
                     sh 'docker push ${DOCKER_REPO}:${IMAGE_TAG}'
                     sh 'docker logout'
                 }
