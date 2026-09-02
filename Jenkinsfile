@@ -45,45 +45,18 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKERHUB_USER',
-                    passwordVariable: 'DOCKERHUB_PASS'
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_PASS'
                 )]) {
-                    sh 'echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin'
+                    sh 'echo $DH_PASS | docker login -u $DH_USER --password-stdin'
                     sh 'docker push ${DOCKER_REPO}:${IMAGE_TAG}'
                     sh 'docker logout'
                 }
             }
         }
 
+    }
 
-    stage('Deploy to Development') {
-    when {
-        branch 'develop'
-    }
-    steps {
-        echo 'Deploying to DEVELOPMENT'
-    }
-}
-
-stage('Deploy to Staging') {
-    when {
-        branch 'release'
-    }
-    steps {
-        echo 'Deploying to STAGING'
-    }
-}
-
-stage('Deploy to Production') {
-    when {
-        branch 'main'
-    }
-    steps {
-        echo 'Deploying to PRODUCTION'
-    }
-}
-    } //
-    
     post {
         success {
             echo "Pipeline succeeded! Image pushed: ${DOCKER_REPO}:${IMAGE_TAG}"
@@ -96,4 +69,4 @@ stage('Deploy to Production') {
             cleanWs()
         }
     }
-} //
+}
