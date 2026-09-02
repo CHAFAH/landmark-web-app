@@ -55,7 +55,6 @@ pipeline {
             }
         }
 
-    }
 
     stage('Deploy to Development') {
     when {
