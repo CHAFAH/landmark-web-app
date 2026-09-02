@@ -82,6 +82,8 @@ stage('Deploy to Production') {
         echo 'Deploying to PRODUCTION'
     }
 }
+    } //
+    
     post {
         success {
             echo "Pipeline succeeded! Image pushed: ${DOCKER_REPO}:${IMAGE_TAG}"
@@ -94,5 +96,4 @@ stage('Deploy to Production') {
             cleanWs()
         }
     }
-}
-}
+} //
