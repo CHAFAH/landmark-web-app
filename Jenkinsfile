@@ -57,6 +57,32 @@ pipeline {
 
     }
 
+    stage('Deploy to Development') {
+    when {
+        branch 'develop'
+    }
+    steps {
+        echo 'Deploying to DEVELOPMENT'
+    }
+}
+
+stage('Deploy to Staging') {
+    when {
+        branch 'release'
+    }
+    steps {
+        echo 'Deploying to STAGING'
+    }
+}
+
+stage('Deploy to Production') {
+    when {
+        branch 'main'
+    }
+    steps {
+        echo 'Deploying to PRODUCTION'
+    }
+}
     post {
         success {
             echo "Pipeline succeeded! Image pushed: ${DOCKER_REPO}:${IMAGE_TAG}"
